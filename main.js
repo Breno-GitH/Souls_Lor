@@ -115,21 +115,44 @@ class ForestBossScene extends Phaser.Scene{
 
         this.groundY = 580;
 
-        // ARENA - ÁRVORES ESCALÁVEIS
+        // ARENA - PLATAFORMAS HORIZONTAIS SÓLIDAS
         this.platforms = [
-            { x: 150, y: 500, width: 60, height: 15 }, // Base esquerda
-            { x: 150, y: 350, width: 60, height: 15 }, // Meio esquerda
-            { x: 150, y: 200, width: 60, height: 15 }, // Topo esquerda
-            { x: 1100, y: 500, width: 60, height: 15 }, // Base direita
-            { x: 1100, y: 350, width: 60, height: 15 }, // Meio direita
-            { x: 1100, y: 200, width: 60, height: 15 }, // Topo direita
+            { x: 220, y: 450, width: 140, height: 16 }, 
+            { x: 150, y: 280, width: 120, height: 14 }, 
+            { x: 1060, y: 450, width: 140, height: 16 }, 
+            { x: 1130, y: 280, width: 120, height: 14 }
         ];
 
-        // PLAYER
+        // TRAMPOLINS NATURAIS (Flores e Arbustos)
+        this.flowers = [
+            { x: 300, y: 580, radius: 28, bounce: -23, compress: 0, maxCompress: 15, type: "HIGH" },
+            { x: 980, y: 580, radius: 28, bounce: -23, compress: 0, maxCompress: 15, type: "HIGH" }
+        ];
+
+        this.bushes = [
+            { x: 120, y: 580, width: 60, bounce: -17, compress: 0, maxCompress: 10 },
+            { x: 1160, y: 580, width: 60, bounce: -17, compress: 0, maxCompress: 10 }
+        ];
+
+        // ATMOSFERA (Partículas do cenário)
+        this.ambientParticles = [];
+        for(let i=0; i<50; i++) {
+            this.ambientParticles.push({
+                x: Phaser.Math.Between(0, 1280),
+                y: Phaser.Math.Between(0, 720),
+                vx: Phaser.Math.Between(-2, 2),
+                vy: Phaser.Math.Between(1, 4),
+                size: Phaser.Math.Between(2, 5),
+                wobbleSpeed: Phaser.Math.FloatBetween(0.02, 0.05),
+                wobbleOffset: Math.random() * Math.PI * 2
+            });
+        }
+
+        // PLAYER - MOVIMENTAÇÃO AÉREA CINÉTICA E MIRA 360
 
         this.player = {
 
-            x:200,
+            x:640, 
             y:this.groundY,
 
             width:40,
@@ -137,13 +160,15 @@ class ForestBossScene extends Phaser.Scene{
 
             velocityY:0,
 
-            speed:6,
+            speed:8, 
 
-            jumpForce:-18,
+            jumpForce:-17, 
 
-            gravity:0.8,
+            gravity:0.85, 
 
             onGround:true,
+            
+            hasAirDash:true, 
 
             hp:100,
 
@@ -162,22 +187,20 @@ class ForestBossScene extends Phaser.Scene{
             onPlatform:null
         };
 
-        // BOSS - GUARDIÃO DA FLORESTA
+        // BOSS COLOSSAL - THE MOSS GUARDIAN (Fixo, Pesado, Estratégico)
 
         this.boss = {
 
-            x:640,
-            y:250,
+            x: 640, 
+            y: 350, 
 
-            hp:600,
+            hp:800, 
 
-            maxHp:600,
+            maxHp:800,
 
             attackCooldown:false,
 
             attackType:0,
-
-            floatTime:0,
 
             animationTime:0,
 
@@ -188,38 +211,31 @@ class ForestBossScene extends Phaser.Scene{
             coreExposedTime:0,
 
             phase:1,
-
-            direction:-1
+            
+            darkness: 0
         };
 
-        // ATAQUES DO BOSS
+        // ARRAYS DE ATAQUES
         this.leafParticles = [];
-        this.rootAttacks = [];
-        this.dangerZones = [];
+        this.dangerZones = []; 
+        this.lateralRoots = []; 
+        this.piercingBranches = []; 
 
-        // INPUTS
+        // NOVOS INPUTS (WASD + Mouse + Shift)
+        this.keys = this.input.keyboard.addKeys({
+            up: Phaser.Input.Keyboard.KeyCodes.W,
+            down: Phaser.Input.Keyboard.KeyCodes.S,
+            left: Phaser.Input.Keyboard.KeyCodes.A,
+            right: Phaser.Input.Keyboard.KeyCodes.D,
+            dash: Phaser.Input.Keyboard.KeyCodes.SHIFT
+        });
 
-        this.cursors = this.input.keyboard.createCursorKeys();
-
-        this.attackKey = this.input.keyboard.addKey(
-            Phaser.Input.Keyboard.KeyCodes.J
-        );
-
-        this.dashKey = this.input.keyboard.addKey(
-            Phaser.Input.Keyboard.KeyCodes.K
-        );
-
-        this.specialKey = this.input.keyboard.addKey(
-            Phaser.Input.Keyboard.KeyCodes.L
-        );
+        // Habilita rastreamento do mouse
+        this.input.on('pointermove', function () {});
 
         // COMBAT
-
         this.playerAttackCooldown = false;
-
-        this.playerSpecialCooldown = false;
-
-        this.slashes = [];
+        this.slashes = []; // Cortes mágicos de longa distância
 
         this.createUI();
     }
@@ -246,14 +262,18 @@ class ForestBossScene extends Phaser.Scene{
                 color:"#88ff88",
                 fontFamily:"monospace"
             }
-        );
+        ).setOrigin(0.5);
     }
 
     update(){
 
+        this.updateAtmosphere();
+
         this.playerMovement();
 
         this.updatePhysics();
+        
+        this.updateBouncers(); 
 
         this.handleCombat();
 
@@ -261,15 +281,108 @@ class ForestBossScene extends Phaser.Scene{
 
         this.updateLeafParticles();
 
-        this.updateRootAttacks();
-
         this.updateDangerZones();
+        
+        this.updateLateralRoots(); 
+        
+        this.updatePiercingBranches(); 
 
         this.bossAI();
 
         this.checkGameOver();
 
         this.renderScene();
+    }
+
+    updateAtmosphere() {
+        for(let p of this.ambientParticles) {
+            p.wobbleOffset += p.wobbleSpeed;
+            p.x += p.vx + Math.sin(p.wobbleOffset) * 1.5;
+            p.y += p.vy;
+
+            if(p.y > 720) {
+                p.y = -10;
+                p.x = Phaser.Math.Between(0, 1280);
+            }
+        }
+    }
+
+    updateBouncers() {
+        // FLORES GIGANTES
+        for(let flower of this.flowers) {
+            if(flower.compress > 0) flower.compress -= 1.5;
+            if(flower.compress < 0) flower.compress = 0;
+
+            if(this.player.velocityY >= 0 && !this.player.onGround) {
+                if(Math.abs(this.player.x - flower.x) < flower.radius + 15 && this.player.y > flower.y - 40 && this.player.y < flower.y + 15) {
+                    this.player.velocityY = flower.bounce; 
+                    this.player.hasAirDash = true; 
+                    this.player.onGround = false;
+                    flower.compress = flower.maxCompress; 
+                    
+                    for(let i=0; i<6; i++) {
+                        this.ambientParticles[Phaser.Math.Between(0,49)].y = flower.y;
+                        this.ambientParticles[Phaser.Math.Between(0,49)].x = flower.x + Phaser.Math.Between(-30, 30);
+                    }
+                    this.cameras.main.shake(80, 0.003);
+                }
+            }
+        }
+
+        // ARBUSTOS
+        for(let bush of this.bushes) {
+            if(bush.compress > 0) bush.compress -= 1;
+
+            if(this.player.velocityY >= 0 && !this.player.onGround) {
+                if(Math.abs(this.player.x - bush.x) < bush.width / 2 + 15 && 
+                   this.player.y > bush.y - 40 && this.player.y <= bush.y + 15) {
+                    this.player.velocityY = bush.bounce; 
+                    this.player.hasAirDash = true;
+                    this.player.onGround = false;
+                    bush.compress = bush.maxCompress;
+                }
+            }
+        }
+    }
+
+    // --- SISTEMAS DE ATAQUE DO BOSS ATUALIZADOS ---
+
+    updateLateralRoots() {
+        for(let i = this.lateralRoots.length - 1; i >= 0; i--) {
+            let root = this.lateralRoots[i];
+            root.x += root.speed;
+            root.life--;
+
+            if(Math.abs(this.player.x - root.x) < 40 && Math.abs(this.player.y - root.y) < 30) {
+                this.player.hp -= 10;
+                this.cameras.main.shake(100, 0.005);
+                this.lateralRoots.splice(i, 1);
+                continue;
+            }
+
+            if(root.life <= 0 || root.x < -100 || root.x > 1380) {
+                this.lateralRoots.splice(i, 1);
+            }
+        }
+    }
+
+    updatePiercingBranches() {
+        for(let i = this.piercingBranches.length - 1; i >= 0; i--) {
+            let branch = this.piercingBranches[i];
+            branch.timer++;
+
+            if(branch.timer === branch.strikeTime) {
+                this.cameras.main.shake(200, 0.008); 
+                
+                if(Math.abs(this.player.y - branch.y) < 40) {
+                    this.player.hp -= 20;
+                }
+            }
+
+            if(branch.timer > branch.strikeTime + 40) {
+                this.piercingBranches.splice(i, 1);
+            }
+        }
     }
 
     updateLeafParticles() {
@@ -279,27 +392,15 @@ class ForestBossScene extends Phaser.Scene{
             leaf.y += leaf.vy;
             leaf.life--;
 
-            // Colisão com player
             let dist = Phaser.Math.Distance.Between(leaf.x, leaf.y, this.player.x, this.player.y);
             if(dist < 30) {
-                this.player.hp -= 3;
+                this.player.hp -= 4; 
                 this.leafParticles.splice(i, 1);
+                continue;
             }
 
             if(leaf.y > 720 || leaf.life <= 0) {
                 this.leafParticles.splice(i, 1);
-            }
-        }
-    }
-
-    updateRootAttacks() {
-        for(let i = this.rootAttacks.length - 1; i >= 0; i--) {
-            let root = this.rootAttacks[i];
-            root.growthTime++;
-            root.size = (root.growthTime / root.maxGrowthTime) * 60;
-
-            if(root.growthTime > root.maxGrowthTime + 30) {
-                this.rootAttacks.splice(i, 1);
             }
         }
     }
@@ -309,30 +410,26 @@ class ForestBossScene extends Phaser.Scene{
             let zone = this.dangerZones[i];
             zone.duration--;
 
-            // Verificar colisão com player (se não estiver em plataforma)
+            this.boss.darkness = Math.min(this.boss.darkness + 0.02, 0.6);
+
             if(this.player.onPlatform === null && this.player.y > zone.y - 50) {
-                this.player.hp -= 2;
+                this.player.hp -= 3; 
             }
 
             if(zone.duration <= 0) {
                 this.dangerZones.splice(i, 1);
             }
         }
+        
+        if(this.dangerZones.length === 0 && this.boss.darkness > 0) {
+            this.boss.darkness -= 0.02;
+        }
     }
 
     checkGameOver() {
-        if(this.player.hp <= 0) {
-            this.player.hp = 0;
-            this.cameras.main.fadeOut(500);
-            this.time.delayedCall(500, ()=> {
-                this.scene.start("MapScene");
-            });
-        }
-
-        if(this.boss.hp <= 0) {
-            this.boss.hp = 0;
-            this.cameras.main.fadeOut(500);
-            this.time.delayedCall(500, ()=> {
+        if(this.player.hp <= 0 || this.boss.hp <= 0) {
+            this.cameras.main.fadeOut(800);
+            this.time.delayedCall(800, ()=> {
                 this.scene.start("MapScene");
             });
         }
@@ -340,95 +437,85 @@ class ForestBossScene extends Phaser.Scene{
 
     playerMovement(){
 
-        let wasOnPlatform = this.player.onPlatform !== null;
+        // MOVIMENTAÇÃO WASD
+        if(this.keys.left.isDown){
+            this.player.x -= this.player.speed;
+            this.player.direction = -1; // O corpo vira para a direção do movimento
+            this.player.animationTime += 0.2;
+        }
+        if(this.keys.right.isDown){
+            this.player.x += this.player.speed;
+            this.player.direction = 1;
+            this.player.animationTime += 0.2;
+        }
 
-        // VERIFICAR SE ESTÁ EM PLATAFORMA
+        if(!this.keys.left.isDown && !this.keys.right.isDown) {
+            this.player.animationTime *= 0.85; 
+        }
+
+        // FÍSICA DE PLATAFORMAS HORIZONTAIS
         this.player.onPlatform = null;
-        for(let platform of this.platforms) {
-            if(
-                this.player.x > platform.x - platform.width / 2 &&
-                this.player.x < platform.x + platform.width / 2 &&
-                this.player.y >= platform.y - 20 &&
-                this.player.y <= platform.y &&
-                this.player.velocityY >= 0
-            ) {
-                this.player.onPlatform = platform;
-                this.player.y = platform.y;
-                this.player.velocityY = 0;
-                this.player.onGround = true;
-                break;
+        let nextY = this.player.y + this.player.velocityY; 
+        
+        // Se estiver segurando 'S', permite passar pelas plataformas para baixo
+        if(!this.keys.down.isDown) {
+            for(let platform of this.platforms) {
+                if(this.player.x > platform.x - platform.width / 2 && this.player.x < platform.x + platform.width / 2) {
+                    if(this.player.velocityY >= 0 && this.player.y <= platform.y + 15 && nextY >= platform.y - 20) {
+                        this.player.onPlatform = platform;
+                        this.player.y = platform.y; 
+                        this.player.velocityY = 0;
+                        this.player.onGround = true;
+                        this.player.hasAirDash = true; 
+                        break;
+                    }
+                }
             }
         }
 
-        // VERIFICAR CHÃO NORMAL
+        // VERIFICAR CHÃO
         if(!this.player.onPlatform && this.player.y >= this.groundY) {
             this.player.y = this.groundY;
             this.player.velocityY = 0;
             this.player.onGround = true;
+            this.player.hasAirDash = true; 
         } else if(this.player.y > this.groundY) {
             this.player.y = this.groundY;
             this.player.velocityY = 0;
             this.player.onGround = true;
+            this.player.hasAirDash = true;
         }
 
-        // MOVIMENTAÇÃO HORIZONTAL
-        if(this.cursors.left.isDown){
-
-            this.player.x -= this.player.speed;
-
-            this.player.direction = -1;
-
-            this.player.animationTime += 0.15;
-        }
-
-        if(this.cursors.right.isDown){
-
-            this.player.x += this.player.speed;
-
-            this.player.direction = 1;
-
-            this.player.animationTime += 0.15;
-        }
-
-        if(!this.cursors.left.isDown && !this.cursors.right.isDown) {
-            this.player.animationTime *= 0.92;
-        }
-
-        // PULO
-        if(
-            Phaser.Input.Keyboard.JustDown(this.cursors.up)
-            &&
-            this.player.onGround
-        ){
-
+        // PULO (Tecla W)
+        if(Phaser.Input.Keyboard.JustDown(this.keys.up) && this.player.onGround){
             this.player.velocityY = this.player.jumpForce;
-
             this.player.onGround = false;
+            this.cameras.main.shake(20, 0.001);
         }
 
-        // DASH
+        // DASH (Tecla SHIFT)
+        if(Phaser.Input.Keyboard.JustDown(this.keys.dash) && !this.player.dashCooldown){
+            if(!this.player.onGround && !this.player.hasAirDash) {
+                // Bloqueado
+            } else {
+                this.player.dashCooldown = true;
+                
+                if(!this.player.onGround) {
+                    this.player.hasAirDash = false; 
+                    this.player.velocityY = 0; 
+                }
 
-        if(
-            Phaser.Input.Keyboard.JustDown(this.dashKey)
-            &&
-            !this.player.dashCooldown
-        ){
+                // O dash obedece as teclas de movimento
+                if(this.keys.left.isDown) this.player.x -= 200; 
+                else if(this.keys.right.isDown) this.player.x += 200;
+                else this.player.x += 200 * this.player.direction; // Default para frente
 
-            this.player.dashCooldown = true;
+                this.cameras.main.shake(50, 0.003);
 
-            if(this.cursors.left.isDown){
-
-                this.player.x -= 180;
+                this.time.delayedCall(600, ()=>{
+                    this.player.dashCooldown = false;
+                });
             }
-            else{
-
-                this.player.x += 180;
-            }
-
-            this.time.delayedCall(700,()=>{
-
-                this.player.dashCooldown = false;
-            });
         }
 
         // LIMITES DE TELA
@@ -437,276 +524,205 @@ class ForestBossScene extends Phaser.Scene{
     }
 
     updatePhysics(){
-
         this.player.velocityY += this.player.gravity;
-
         this.player.y += this.player.velocityY;
 
-        if(this.player.y >= this.groundY){
-
+        if(!this.player.onPlatform && this.player.y >= this.groundY){
             this.player.y = this.groundY;
-
             this.player.velocityY = 0;
-
             this.player.onGround = true;
         }
     }
 
     handleCombat(){
+        let pointer = this.input.activePointer;
 
-        // ATAQUE MELEE
-        if(
-            Phaser.Input.Keyboard.JustDown(this.attackKey)
-            &&
-            !this.playerAttackCooldown
-        ){
+        // COMBATE MÁGICO 360 GRAUS
+        if(pointer.leftButtonDown() && !this.playerAttackCooldown){
 
             this.playerAttackCooldown = true;
-
             this.player.isAttacking = true;
-
             this.player.attackTime = 0;
 
-            let distance = Phaser.Math.Distance.Between(
-                this.player.x,
-                this.player.y,
-                this.boss.x,
-                this.boss.y
-            );
-
-            // Verificar se acertou o núcleo exposto
-            if(distance < 150 && this.boss.coreExposed) {
-
-                this.boss.hp -= 30;
-
-                this.cameras.main.shake(150,0.004);
-
-                this.boss.coreExposedTime = 0; // Fechar núcleo
-            }
-
-            this.time.delayedCall(250,()=>{
-
-                this.player.isAttacking = false;
-
-                this.playerAttackCooldown = false;
-            });
-        }
-
-        // CORTE ESPIRITUAL
-        if(
-            Phaser.Input.Keyboard.JustDown(this.specialKey)
-            &&
-            !this.playerSpecialCooldown
-        ){
-
-            this.playerSpecialCooldown = true;
+            // Calcula o ângulo exato para atirar a meia-lua
+            let angle = Phaser.Math.Angle.Between(this.player.x, this.player.y - 20, pointer.x, pointer.y);
+            let slashSpeed = 22; // Rápido e responsivo
 
             this.slashes.push({
-
-                x:this.player.x + 40,
-                y:this.player.y - 40,
-
-                speed:14,
-
-                life:80
+                x: this.player.x,
+                y: this.player.y - 20,
+                vx: Math.cos(angle) * slashSpeed,
+                vy: Math.sin(angle) * slashSpeed,
+                angle: angle,
+                life: 60
             });
 
-            this.time.delayedCall(600,()=>{
+            // Knockback no ar para estilos de combate aéreo (Leve)
+            if(!this.player.onGround) {
+                this.player.velocityY -= 1; // Leve "flutuada" ao atirar no ar
+            }
 
-                this.playerSpecialCooldown = false;
+            this.cameras.main.shake(30, 0.001); // Feedback de tiro
+
+            // Ritmo natural de disparo - Semi-Automático
+            this.time.delayedCall(300, ()=>{
+                this.player.isAttacking = false;
+                this.playerAttackCooldown = false;
             });
         }
     }
 
     updateSlashes(){
-
         for(let i = this.slashes.length - 1; i >= 0; i--){
-
             let slash = this.slashes[i];
-
-            slash.x += slash.speed;
-
+            slash.x += slash.vx;
+            slash.y += slash.vy;
             slash.life--;
 
-            let distance = Phaser.Math.Distance.Between(
-                slash.x,
-                slash.y,
-                this.boss.x,
-                this.boss.y
-            );
+            // O Boss Colossal é alto. Hitbox precisa cobrir a altura central.
+            let distToBossX = Math.abs(slash.x - this.boss.x);
+            let distToBossY = Math.abs(slash.y - (this.boss.y + 20)); 
+            
+            if(distToBossX < 120 && distToBossY < 160){
+                
+                if(this.boss.coreExposed) {
+                    this.boss.hp -= 25;
+                    this.cameras.main.shake(100,0.004);
+                    
+                    // Explosão de energia verde
+                    for(let p=0; p<4; p++) {
+                        this.ambientParticles[Phaser.Math.Between(0,49)].x = this.boss.x;
+                        this.ambientParticles[Phaser.Math.Between(0,49)].y = this.boss.y + 20;
+                    }
 
-            if(distance < 100){
-
-                this.boss.hp -= 10;
-
-                this.cameras.main.shake(80,0.002);
+                    if(Math.random() < 0.2) this.boss.coreExposed = false;
+                } else {
+                    this.cameras.main.shake(15,0.001); // Dano resistido
+                }
 
                 this.slashes.splice(i,1);
-
                 continue;
             }
 
-            if(slash.life <= 0){
-
-                this.slashes.splice(i,1);
-            }
+            if(slash.life <= 0) this.slashes.splice(i,1);
         }
     }
 
     bossAI(){
-
-        this.boss.floatTime += 0.03;
-
         this.boss.animationTime += 0.04;
 
-        // VERIFICAR FASE 2
-        if(this.boss.hp < this.boss.maxHp * 0.4 && this.boss.phase === 1) {
+        if(this.boss.hp < this.boss.maxHp * 0.5 && this.boss.phase === 1) {
             this.boss.phase = 2;
-            this.phaseText.setText("PHASE 2 - ENRAGED");
-            this.phaseText.setColor("#ff6655");
+            this.phaseText.setText("PHASE 2 - CORRUPTED");
+            this.phaseText.setColor("#ff3333");
+            this.cameras.main.shake(500, 0.01);
         }
 
-        // MOVIMENTO BASE - FLUTUAÇÃO
-        let baseY = this.boss.phase === 1 ? 280 : 260;
-        this.boss.y = baseY + Math.sin(this.boss.floatTime) * 12;
+        this.boss.bodyTilt = Math.sin(this.boss.animationTime * 0.5) * 5;
 
-        // INCLINAÇÃO DO CORPO
-        if(this.player.x < this.boss.x) {
-            this.boss.bodyTilt = -5;
-        } else {
-            this.boss.bodyTilt = 5;
-        }
-
-        // NÚCLEO EXPOSTO POR UM TEMPO
         if(this.boss.coreExposed) {
             this.boss.coreExposedTime++;
-            if(this.boss.coreExposedTime > 120) {
+            if(this.boss.coreExposedTime > 150) {
                 this.boss.coreExposed = false;
             }
         }
 
-        // ATAQUE DO BOSS
         if(!this.boss.attackCooldown){
 
             this.boss.attackCooldown = true;
 
-            let attackDuration = 800;
+            let attackPool = [0, 1, 2]; 
+            let attackDuration = 1500;
 
-            if(this.boss.phase === 1) {
-                this.boss.attackType = Phaser.Math.Between(0, 3);
-            } else {
-                this.boss.attackType = Phaser.Math.Between(0, 4);
+            if(this.boss.phase === 2 && Math.random() < 0.25) {
+                attackPool = [3];
             }
 
-            // ATAQUE 1: CHUVA DE FOLHAS
+            this.boss.attackType = Phaser.Utils.Array.GetRandom(attackPool);
+
             if(this.boss.attackType === 0) {
                 this.startLeafRain();
-                attackDuration = 2000;
+                attackDuration = 2200;
             }
-            // ATAQUE 2: RAÍZES PERFURANTES
             else if(this.boss.attackType === 1) {
-                this.startRootAttack();
-                attackDuration = 1200;
-            }
-            // ATAQUE 3: EXPANSÃO FLORESTAL
-            else if(this.boss.attackType === 2) {
-                this.startForestExpansion();
+                this.startPiercingBranches();
                 attackDuration = 1800;
             }
-            // ATAQUE 4: INVESTIDA ANCESTRAL
+            else if(this.boss.attackType === 2) {
+                this.startLateralRoots();
+                attackDuration = 1800;
+            }
             else if(this.boss.attackType === 3) {
-                this.startAncestralCharge();
-                attackDuration = 1500;
+                this.startForestExpansion();
+                attackDuration = 2500;
             }
 
             this.time.delayedCall(attackDuration, ()=>{
 
                 this.boss.attackCooldown = false;
 
-                // Chance de expor núcleo
-                if(Math.random() < 0.4) {
+                if(Math.random() < 0.5 || this.boss.attackType === 3) {
                     this.boss.coreExposed = true;
                     this.boss.coreExposedTime = 0;
+                    this.cameras.main.shake(80, 0.003); 
                 }
             });
         }
     }
 
+    // --- LÓGICA DOS ATAQUES (Preservados do update anterior) ---
+
     startLeafRain() {
-        // Criar tempestade de folhas
-        for(let i = 0; i < 20; i++) {
-            this.time.delayedCall(i * 60, ()=>{
-                let leafX = Phaser.Math.Between(100, 1180);
+        for(let i = 0; i < 40; i++) {
+            this.time.delayedCall(i * 30, ()=>{
                 this.leafParticles.push({
-                    x: leafX,
-                    y: 0,
-                    vx: Phaser.Math.Between(-2, 2),
-                    vy: 6,
-                    life: 120,
-                    radius: Phaser.Math.Between(6, 12)
+                    x: Phaser.Math.Between(100, 1180),
+                    y: -20,
+                    vx: Phaser.Math.Between(-3, 3),
+                    vy: Phaser.Math.Between(8, 12), 
+                    life: 150,
+                    radius: Phaser.Math.Between(8, 15)
                 });
             });
         }
     }
 
-    startRootAttack() {
-        // Raízes surgem do chão
-        let baseX = this.boss.x;
-        
-        for(let i = 0; i < 5; i++) {
-            let rootX = baseX + (i - 2) * 150;
-            
-            this.time.delayedCall(i * 150, ()=>{
-                this.rootAttacks.push({
-                    x: rootX,
-                    y: 580,
-                    growthTime: 0,
-                    maxGrowthTime: 30,
-                    size: 0,
-                    active: true
-                });
+    startPiercingBranches() {
+        let heights = [580, 450, 280];
+        let targetY = Phaser.Utils.Array.GetRandom(heights);
+        let fromLeft = Math.random() > 0.5;
 
-                // Verificar colisão com player
-                this.time.delayedCall(150, ()=>{
-                    let dist = Math.abs(this.player.x - rootX);
-                    if(dist < 80 && this.player.y > 500) {
-                        this.player.hp -= 15;
-                        this.cameras.main.shake(200, 0.005);
-                    }
+        this.piercingBranches.push({
+            y: targetY,
+            fromLeft: fromLeft,
+            timer: 0,
+            strikeTime: 60 
+        });
+    }
+
+    startLateralRoots() {
+        let heights = [580, 450];
+        let targetY = Phaser.Utils.Array.GetRandom(heights);
+        let fromLeft = Math.random() > 0.5;
+        let startX = fromLeft ? -50 : 1330;
+        let speed = fromLeft ? 10 : -10;
+
+        for(let i=0; i<3; i++) {
+            this.time.delayedCall(i * 200, ()=>{
+                this.lateralRoots.push({
+                    x: startX,
+                    y: targetY,
+                    speed: speed,
+                    life: 200
                 });
             });
         }
     }
 
     startForestExpansion() {
-        // Raízes cobrem quase todo o chão
         this.dangerZones.push({
             y: 550,
-            intensity: 1,
-            duration: 120
-        });
-    }
-
-    startAncestralCharge() {
-        // Boss carrega e investe
-        let startX = this.boss.x;
-        let targetX = this.player.x;
-        let chargeSpeed = 15;
-        let chargeDistance = Math.abs(targetX - startX);
-        let chargeDuration = chargeDistance / chargeSpeed;
-
-        for(let i = 0; i < 20; i++) {
-            this.time.delayedCall(i * 20, ()=>{
-                let progress = Math.min(i * 20 / 600, 1);
-                this.boss.x = startX + (targetX - startX) * progress;
-            });
-        }
-
-        // Deixar núcleo exposto após a carga
-        this.time.delayedCall(600, ()=>{
-            this.boss.coreExposed = true;
-            this.boss.coreExposedTime = 0;
-            this.boss.x = startX;
+            duration: 180 
         });
     }
 
@@ -714,13 +730,18 @@ class ForestBossScene extends Phaser.Scene{
 
         this.graphics.clear();
 
-        // FUNDO FLORESTA ANCESTRAL
-        this.graphics.fillStyle(0x0a1f0a);
+        // FUNDO
+        this.graphics.fillStyle(0x050f05);
         this.graphics.fillRect(0,0,1280,720);
 
-        // LUA GRANDE
-        this.graphics.fillStyle(0xffffff,0.06);
-        this.graphics.fillCircle(1050, 100, 100);
+        if(this.boss.darkness > 0) {
+            this.graphics.fillStyle(0x000000, this.boss.darkness);
+            this.graphics.fillRect(0, 0, 1280, 720);
+        }
+
+        // LUA 
+        this.graphics.fillStyle(0xffffff, 0.05);
+        this.graphics.fillCircle(640, 150, 150);
 
         // NEBLINA
         this.graphics.fillStyle(0x1a3a1a, 0.15);
@@ -728,31 +749,32 @@ class ForestBossScene extends Phaser.Scene{
             this.graphics.fillRect(0, i * 144, 1280, 50);
         }
 
-        // ÁRVORES ESCALÁVEIS E PLATAFORMAS
+        // PARTÍCULAS AMBIENTAIS
+        this.graphics.fillStyle(0x55aa55, 0.4);
+        for(let p of this.ambientParticles) {
+            this.graphics.fillCircle(p.x, p.y, p.size);
+        }
+
+        // DESENHO DAS PLATAFORMAS 
         this.drawArena();
+
+        // TRAMPOLINS NATURAIS
+        this.drawBouncers();
 
         // CHÃO
         this.graphics.fillStyle(0x1b2a1b);
         this.graphics.fillRect(0, 600, 1280, 120);
 
-        // Textura de folhas no chão
-        this.graphics.fillStyle(0x2d4a2d, 0.3);
-        for(let i = 0; i < 20; i++) {
-            this.graphics.fillRect(i * 64, 600, 30, 120);
-        }
+        // BOSS COLOSSO
+        this.drawColossalBoss();
 
-        // RAÍZES GIGANTES DECORATIVAS
-        this.drawDecoRoots();
-
-        // PLAYER
+        // PLAYER (COM MIRA)
         this.drawPlayer();
-
-        // BOSS
-        this.drawBoss();
 
         // EFEITOS DE ATAQUE
         this.drawLeafParticles();
-        this.drawRootAttacks();
+        this.drawLateralRoots();
+        this.drawPiercingBranches();
         this.drawDangerZones();
 
         // SLASHES
@@ -762,172 +784,363 @@ class ForestBossScene extends Phaser.Scene{
         this.drawHealthBars();
     }
 
+    drawBouncers() {
+        let t = this.time.now * 0.002;
+
+        // ARBUSTOS
+        for(let bush of this.bushes) {
+            let height = 45 - bush.compress;
+            let currentY = bush.y - height / 2;
+            let breathe = Math.sin(t + bush.x) * 3;
+            
+            this.graphics.fillStyle(0x1a3a1a);
+            this.graphics.fillEllipse(bush.x, currentY + 5, bush.width * 1.1, height * 1.1);
+            
+            this.graphics.fillStyle(0x2a5a2a);
+            this.graphics.fillEllipse(bush.x - 10, currentY + breathe, bush.width * 0.6, height * 0.8);
+            this.graphics.fillEllipse(bush.x + 10, currentY - breathe, bush.width * 0.6, height * 0.8);
+            this.graphics.fillEllipse(bush.x, currentY - 5, bush.width * 0.8, height * 0.9);
+            
+            this.graphics.fillStyle(0x4a8a4a, 0.8);
+            this.graphics.fillEllipse(bush.x, currentY, bush.width * 0.5, height * 0.5);
+            
+            this.graphics.fillStyle(0x88ff88, 0.9);
+            this.graphics.fillCircle(bush.x - 12, currentY - 8 + breathe, 3);
+            this.graphics.fillCircle(bush.x + 15, currentY + 2 - breathe, 4);
+        }
+
+        // FLORES GIGANTES (Bézier Matemático Seguro)
+        for(let flower of this.flowers) {
+            let currentRadius = flower.radius - (flower.compress * 0.5); 
+            let currentY = flower.y + flower.compress;
+            let sway = Math.sin(t + flower.x) * 5; 
+
+            // Caule
+            this.graphics.lineStyle(8, 0x2d5f2d);
+            this.graphics.beginPath();
+            this.graphics.moveTo(flower.x, this.groundY + 10);
+            
+            for(let i = 1; i <= 10; i++) {
+                let bt = i / 10;
+                let px = Math.pow(1 - bt, 2) * flower.x + 2 * (1 - bt) * bt * (flower.x + sway * 2) + Math.pow(bt, 2) * (flower.x + sway);
+                let py = Math.pow(1 - bt, 2) * (this.groundY + 10) + 2 * (1 - bt) * bt * (currentY + 20) + Math.pow(bt, 2) * currentY;
+                this.graphics.lineTo(px, py);
+            }
+            this.graphics.strokePath();
+
+            // Folhas
+            this.graphics.fillStyle(0x3a7a3a);
+            this.graphics.fillEllipse(flower.x - 15 + sway, currentY + 20, 20, 8);
+            this.graphics.fillEllipse(flower.x + 15 + sway, currentY + 30, 20, 8);
+
+            let fX = flower.x + sway;
+
+            // Pétalas
+            this.graphics.fillStyle(0xaa2266);
+            for(let i=0; i<3; i++) {
+                let angle = (i / 3) * Math.PI + Math.PI; 
+                this.graphics.fillEllipse(fX + Math.cos(angle) * 10, currentY + Math.sin(angle) * 10, currentRadius * 1.5, currentRadius * 0.8);
+            }
+
+            this.graphics.fillStyle(0xff4499);
+            let pLift = flower.compress > 0 ? 15 : 0; 
+            
+            this.graphics.fillEllipse(fX - 15, currentY - pLift, currentRadius * 1.4, currentRadius * 0.6);
+            this.graphics.fillEllipse(fX + 15, currentY - pLift, currentRadius * 1.4, currentRadius * 0.6);
+            this.graphics.fillEllipse(fX, currentY + 5, currentRadius * 1.8, currentRadius * 0.8);
+
+            // Núcleo
+            this.graphics.fillStyle(0xffff55);
+            this.graphics.fillCircle(fX, currentY - 5, currentRadius * 0.4);
+            
+            this.graphics.fillStyle(0xffffff, 0.7);
+            this.graphics.fillCircle(fX - 5, currentY - 8, 3);
+            this.graphics.fillCircle(fX + 4, currentY - 4, 2);
+            this.graphics.fillCircle(fX, currentY - 2, 4);
+        }
+    }
+
     drawArena() {
-        // ÁRVORE ESQUERDA
         this.drawTree(150, 200, 80, 400);
+        this.drawTree(1130, 200, 80, 400);
 
-        // ÁRVORE DIREITA
-        this.drawTree(1100, 200, 80, 400);
-
-        // ÁRVORE CENTRAL (menor)
-        this.drawTree(640, 280, 60, 300);
-
-        // PLATAFORMAS VISÍVEIS
+        // PLATAFORMAS (Galhos Sólidos)
         for(let platform of this.platforms) {
-            this.graphics.fillStyle(0x5a4830);
-            this.graphics.fillRect(
-                platform.x - platform.width / 2,
-                platform.y,
-                platform.width,
-                platform.height
-            );
+            
+            this.graphics.fillStyle(0x3a2817);
+            this.graphics.beginPath();
+            this.graphics.moveTo(platform.x - platform.width/2, platform.y);
+            this.graphics.lineTo(platform.x + platform.width/2, platform.y);
+            this.graphics.lineTo(platform.x + platform.width/2.5, platform.y + platform.height);
+            this.graphics.lineTo(platform.x - platform.width/2.5, platform.y + platform.height);
+            this.graphics.closePath();
+            this.graphics.fill();
 
-            // Musgo na plataforma
-            this.graphics.fillStyle(0x55aa55, 0.4);
-            this.graphics.fillRect(
-                platform.x - platform.width / 2 + 2,
-                platform.y - 3,
-                platform.width - 4,
-                3
-            );
+            this.graphics.lineStyle(2, 0x1a1a0a, 0.6);
+            this.graphics.beginPath();
+            this.graphics.moveTo(platform.x - platform.width/2.2, platform.y + 4);
+            this.graphics.lineTo(platform.x + platform.width/2.2, platform.y + 4);
+            this.graphics.strokePath();
+
+            this.graphics.fillStyle(0x2d5f2d, 0.9);
+            this.graphics.fillEllipse(platform.x - platform.width/3, platform.y, 25, 8);
+            this.graphics.fillEllipse(platform.x, platform.y, 40, 10);
+            this.graphics.fillEllipse(platform.x + platform.width/3, platform.y, 25, 8);
         }
     }
 
     drawTree(x, y, width, height) {
-        // TRONCO
         this.graphics.fillStyle(0x3a2817);
-        this.graphics.fillRect(x - width / 2, y, width, height);
+        this.graphics.beginPath();
+        this.graphics.moveTo(x - width/2, y);
+        this.graphics.lineTo(x + width/2, y);
+        this.graphics.lineTo(x + width/2 + 30, y + height);
+        this.graphics.lineTo(x - width/2 - 30, y + height);
+        this.graphics.fill();
 
-        // CASCA RACHADA
-        this.graphics.lineStyle(2, 0x1a1a0a, 0.5);
-        for(let i = 0; i < 4; i++) {
+        this.graphics.lineStyle(3, 0x1a1a0a, 0.6);
+        for(let i = 0; i < 6; i++) {
             this.graphics.beginPath();
-            this.graphics.moveTo(x - width / 2 + i * width / 4, y);
-            this.graphics.lineTo(x - width / 2 + i * width / 4 + Phaser.Math.Between(-5, 5), y + height);
+            let startX = x - width / 2.5 + i * width / 5;
+            this.graphics.moveTo(startX, y);
+            for(let j = 0; j < height; j+=40) {
+                let offsetX = Math.sin(j * 0.05 + i) * 8;
+                this.graphics.lineTo(startX + offsetX, y + j);
+            }
             this.graphics.strokePath();
         }
 
-        // GALHOS
-        this.graphics.lineStyle(12, 0x4a3820);
-        
-        // Galho superior esquerdo
+        this.graphics.lineStyle(16, 0x2a1807);
         this.graphics.beginPath();
-        this.graphics.moveTo(x - width / 2, y + 60);
-        this.graphics.lineTo(x - width * 1.5, y + 20);
-        this.graphics.stroke();
+        this.graphics.moveTo(x, y + 80);
+        for(let i = 1; i <= 10; i++) {
+            let bt = i / 10;
+            let px = Math.pow(1-bt, 2) * x + 2 * (1-bt) * bt * (x - width * 2) + Math.pow(bt, 2) * (x - width * 1.8);
+            let py = Math.pow(1-bt, 2) * (y + 80) + 2 * (1-bt) * bt * (y + 40) + Math.pow(bt, 2) * (y - 20);
+            this.graphics.lineTo(px, py);
+        }
+        this.graphics.strokePath();
 
-        // Galho superior direito
         this.graphics.beginPath();
-        this.graphics.moveTo(x + width / 2, y + 60);
-        this.graphics.lineTo(x + width * 1.5, y + 20);
-        this.graphics.stroke();
+        this.graphics.moveTo(x, y + 100);
+        for(let i = 1; i <= 10; i++) {
+            let bt = i / 10;
+            let px = Math.pow(1-bt, 2) * x + 2 * (1-bt) * bt * (x + width * 2) + Math.pow(bt, 2) * (x + width * 1.6);
+            let py = Math.pow(1-bt, 2) * (y + 100) + 2 * (1-bt) * bt * (y + 50) + Math.pow(bt, 2) * (y - 10);
+            this.graphics.lineTo(px, py);
+        }
+        this.graphics.strokePath();
 
-        // Galho médio
-        this.graphics.beginPath();
-        this.graphics.moveTo(x - width / 2, y + height / 2);
-        this.graphics.lineTo(x - width * 1.3, y + height / 2 - 40);
-        this.graphics.stroke();
+        this.graphics.fillStyle(0x1d4a1d, 0.8);
+        this.graphics.fillCircle(x, y - 40, 80);
+        this.graphics.fillCircle(x - 60, y - 10, 60);
+        this.graphics.fillCircle(x + 60, y - 10, 60);
 
-        // FOLHAGEM (topo)
-        this.graphics.fillStyle(0x2d5f2d, 0.6);
+        this.graphics.fillStyle(0x2d5f2d, 0.9);
         this.graphics.fillCircle(x, y - 30, 60);
         this.graphics.fillCircle(x - 50, y, 40);
         this.graphics.fillCircle(x + 50, y, 40);
-
-        // MUSGO
-        this.graphics.fillStyle(0x55aa55, 0.5);
-        this.graphics.fillCircle(x - 20, y + 150, 15);
-        this.graphics.fillCircle(x + 25, y + 250, 12);
     }
 
-    drawDecoRoots() {
-        this.graphics.lineStyle(8, 0x2d4a2d, 0.5);
+    drawColossalBoss() {
+        let x = this.boss.x;
+        let y = this.boss.y;
+        let tilt = this.boss.bodyTilt;
 
-        // Raízes saindo da esquerda
+        // MASSA COLOSSAL DE RAÍZES (Fixo no chão)
+        this.graphics.fillStyle(0x2a180f);
         this.graphics.beginPath();
-        this.graphics.moveTo(0, 600);
-        this.graphics.lineTo(75, 575);
-        this.graphics.lineTo(150, 500);
+        this.graphics.moveTo(x - 300, 620); 
+        
+        for(let i=0; i<=10; i++) {
+            let bt = i/10;
+            let px = Math.pow(1-bt, 2)*(x-300) + 2*(1-bt)*bt*(x-100) + Math.pow(bt, 2)*(x - 60 + tilt*5);
+            let py = Math.pow(1-bt, 2)*620 + 2*(1-bt)*bt*500 + Math.pow(bt, 2)*(y + 50);
+            this.graphics.lineTo(px, py);
+        }
+        for(let i=10; i>=0; i--) {
+            let bt = i/10;
+            let px = Math.pow(1-bt, 2)*(x+300) + 2*(1-bt)*bt*(x+100) + Math.pow(bt, 2)*(x + 60 + tilt*5);
+            let py = Math.pow(1-bt, 2)*620 + 2*(1-bt)*bt*500 + Math.pow(bt, 2)*(y + 50);
+            this.graphics.lineTo(px, py);
+        }
+        this.graphics.fill();
+
+        this.graphics.lineStyle(4, 0x1a0f0a, 0.7);
+        for(let r=0; r<15; r++) {
+            this.graphics.beginPath();
+            let rx = x - 250 + (r * 35);
+            this.graphics.moveTo(rx, 620);
+            for(let j=0; j<10; j++) {
+                this.graphics.lineTo(rx + Math.sin(j + r)*10, 620 - (j*20));
+            }
+            this.graphics.strokePath();
+        }
+
+        // TORSO HUMANOIDE DE MADEIRA
+        this.graphics.save();
+        this.graphics.translateCanvas(x, y + 50);
+        this.graphics.rotateCanvas(tilt * Math.PI / 180);
+        
+        this.graphics.fillStyle(0x4a3820);
+        this.graphics.fillEllipse(0, 0, 160, 200);
+
+        this.graphics.lineStyle(5, 0x44dd44, 0.6 + (this.boss.darkness)); 
+        this.graphics.beginPath();
+        this.graphics.moveTo(-40, -60); this.graphics.lineTo(-20, 80);
+        this.graphics.moveTo(50, -50); this.graphics.lineTo(30, 90);
         this.graphics.strokePath();
 
-        // Raízes saindo do centro
+        // NÚCLEO ESPIRITUAL
+        if(this.boss.coreExposed) {
+            let pulse = Math.sin(this.boss.animationTime * 5) * 0.4 + 0.6;
+            
+            this.graphics.fillStyle(0x050505, 0.9);
+            this.graphics.fillEllipse(0, 20, 70, 100);
+
+            this.graphics.fillStyle(0x00ff66, pulse);
+            this.graphics.fillCircle(0, 20, 35);
+
+            this.graphics.lineStyle(3, 0x44ff44, pulse);
+            for(let v = 0; v < 8; v++) {
+                let a = (v/8) * Math.PI * 2;
+                this.graphics.beginPath();
+                this.graphics.moveTo(Math.cos(a)*30, 20 + Math.sin(a)*30);
+                this.graphics.lineTo(Math.cos(a)*60, 20 + Math.sin(a)*60);
+                this.graphics.strokePath();
+            }
+
+            this.graphics.lineStyle(2, 0xffaa00, 0.8);
+            this.graphics.strokeCircle(0, 20, 80);
+        }
+
+        this.graphics.restore();
+
+        // BRAÇOS ARTICULADOS GIGANTES
+        let armLift = Math.cos(this.boss.animationTime) * 30;
+        let armStretch = Math.sin(this.boss.animationTime * 0.5) * 20;
+
+        let sLX = x - 90 + tilt, sLY = y;
+        let eLX = sLX - 120 - armStretch, eLY = sLY + 60 + armLift;
+        let mLX = eLX - 50, mLY = eLY + 150 - armLift;
+
+        this.graphics.lineStyle(35, 0x3a2817);
         this.graphics.beginPath();
-        this.graphics.moveTo(640, 650);
-        this.graphics.lineTo(600, 625);
-        this.graphics.lineTo(500, 580);
+        this.graphics.moveTo(sLX, sLY); this.graphics.lineTo(eLX, eLY); this.graphics.lineTo(mLX, mLY);
         this.graphics.strokePath();
 
+        this.graphics.lineStyle(12, 0x2a180f);
+        this.graphics.beginPath(); this.graphics.moveTo(mLX, mLY); this.graphics.lineTo(mLX-40, mLY+40); this.graphics.strokePath();
+        this.graphics.beginPath(); this.graphics.moveTo(mLX, mLY); this.graphics.lineTo(mLX, mLY+60); this.graphics.strokePath();
+        this.graphics.beginPath(); this.graphics.moveTo(mLX, mLY); this.graphics.lineTo(mLX+30, mLY+50); this.graphics.strokePath();
+
+        let sRX = x + 90 + tilt, sRY = y;
+        let eRX = sRX + 120 + armStretch, eRY = sRY + 60 - armLift;
+        let mRX = eRX + 50, mRY = eRY + 150 + armLift;
+
+        this.graphics.lineStyle(35, 0x3a2817);
         this.graphics.beginPath();
-        this.graphics.moveTo(640, 650);
-        this.graphics.lineTo(680, 625);
-        this.graphics.lineTo(800, 580);
+        this.graphics.moveTo(sRX, sRY); this.graphics.lineTo(eRX, eRY); this.graphics.lineTo(mRX, mRY);
         this.graphics.strokePath();
 
-        // Raízes saindo da direita
+        this.graphics.lineStyle(12, 0x2a180f);
+        this.graphics.beginPath(); this.graphics.moveTo(mRX, mRY); this.graphics.lineTo(mRX+40, mRY+40); this.graphics.strokePath();
+        this.graphics.beginPath(); this.graphics.moveTo(mRX, mRY); this.graphics.lineTo(mRX, mRY+60); this.graphics.strokePath();
+        this.graphics.beginPath(); this.graphics.moveTo(mRX, mRY); this.graphics.lineTo(mRX-30, mRY+50); this.graphics.strokePath();
+
+        // CABEÇA
+        let headY = y - 110 + Math.sin(this.boss.animationTime * 2) * 5;
+        this.graphics.fillStyle(0x1a1a1a);
+        this.graphics.fillCircle(x + tilt, headY, 55);
+
+        this.graphics.lineStyle(18, 0x8b7355);
         this.graphics.beginPath();
-        this.graphics.moveTo(1280, 600);
-        this.graphics.lineTo(1205, 575);
-        this.graphics.lineTo(1150, 500);
+        this.graphics.moveTo(x - 30 + tilt, headY - 20); this.graphics.lineTo(x - 100 + tilt, headY - 80); this.graphics.lineTo(x - 120 + tilt, headY - 140);
         this.graphics.strokePath();
+        
+        this.graphics.beginPath();
+        this.graphics.moveTo(x + 30 + tilt, headY - 20); this.graphics.lineTo(x + 100 + tilt, headY - 80); this.graphics.lineTo(x + 120 + tilt, headY - 140);
+        this.graphics.strokePath();
+
+        let eyeColor = this.boss.phase === 2 ? 0xff2222 : 0x00ff44;
+        let glow = Math.sin(this.boss.animationTime * 3) * 0.4 + 0.6;
+        this.graphics.fillStyle(eyeColor, glow);
+        this.graphics.fillCircle(x - 25 + tilt, headY - 10, 12);
+        this.graphics.fillCircle(x + 25 + tilt, headY - 10, 12);
     }
 
     drawLeafParticles() {
         for(let leaf of this.leafParticles) {
-            this.graphics.fillStyle(0x66dd00, Math.max(0, leaf.life / 120));
-
-            // Forma de folha - triângulo rotacionado
+            this.graphics.fillStyle(0x66dd00, Math.max(0, leaf.life / 150));
             let angle = Math.random() * Math.PI * 2;
-            let p1x = leaf.x + Math.cos(angle) * leaf.radius;
-            let p1y = leaf.y + Math.sin(angle) * leaf.radius;
-            let p2x = leaf.x + Math.cos(angle + 2.1) * leaf.radius;
-            let p2y = leaf.y + Math.sin(angle + 2.1) * leaf.radius;
-            let p3x = leaf.x + Math.cos(angle + 4.2) * leaf.radius;
-            let p3y = leaf.y + Math.sin(angle + 4.2) * leaf.radius;
-
-            this.graphics.fillTriangle(p1x, p1y, p2x, p2y, p3x, p3y);
-
-            // Brilho
-            this.graphics.fillStyle(0xffff88, Math.max(0, leaf.life / 200));
-            this.graphics.fillCircle(leaf.x + 2, leaf.y - 2, 2);
+            let r = leaf.radius;
+            this.graphics.fillTriangle(
+                leaf.x + Math.cos(angle)*r, leaf.y + Math.sin(angle)*r,
+                leaf.x + Math.cos(angle+2.1)*r, leaf.y + Math.sin(angle+2.1)*r,
+                leaf.x + Math.cos(angle+4.2)*r, leaf.y + Math.sin(angle+4.2)*r
+            );
         }
     }
 
-    drawRootAttacks() {
-        for(let root of this.rootAttacks) {
-            let progress = root.growthTime / root.maxGrowthTime;
-
-            // Base da raiz
+    drawLateralRoots() {
+        for(let root of this.lateralRoots) {
             this.graphics.fillStyle(0x4a3820);
-            this.graphics.fillRect(root.x - 25, 580 - root.size, 50, root.size);
+            this.graphics.fillEllipse(root.x, root.y - 15, 60, 40);
+            
+            this.graphics.lineStyle(5, 0x2d5f2d);
+            this.graphics.beginPath();
+            this.graphics.moveTo(root.x, root.y - 35);
+            this.graphics.lineTo(root.x - 20, root.y - 60);
+            this.graphics.moveTo(root.x, root.y - 35);
+            this.graphics.lineTo(root.x + 20, root.y - 60);
+            this.graphics.strokePath();
+        }
+    }
 
-            // Brilho verde nas fendas
-            if(progress > 0.3) {
-                this.graphics.lineStyle(3, 0x44dd44, progress * 0.7);
+    drawPiercingBranches() {
+        for(let branch of this.piercingBranches) {
+            let warnAlpha = Math.min(branch.timer / 30, 0.8);
+            
+            if(branch.timer < branch.strikeTime) {
+                this.graphics.lineStyle(4, 0xff0000, warnAlpha);
                 this.graphics.beginPath();
-                this.graphics.moveTo(root.x - 10, 580 - root.size);
-                this.graphics.lineTo(root.x - 10, 580);
+                this.graphics.moveTo(0, branch.y);
+                this.graphics.lineTo(1280, branch.y);
+                this.graphics.strokePath();
+            } 
+            else {
+                this.graphics.fillStyle(0x3a2817);
+                this.graphics.fillRect(0, branch.y - 30, 1280, 60);
+                
+                this.graphics.lineStyle(4, 0x1a1a0a);
+                this.graphics.beginPath();
+                this.graphics.moveTo(0, branch.y - 15); this.graphics.lineTo(1280, branch.y - 15);
+                this.graphics.moveTo(0, branch.y + 15); this.graphics.lineTo(1280, branch.y + 15);
                 this.graphics.strokePath();
 
-                this.graphics.beginPath();
-                this.graphics.moveTo(root.x + 10, 580 - root.size);
-                this.graphics.lineTo(root.x + 10, 580);
-                this.graphics.strokePath();
+                this.graphics.fillStyle(0x5a4830);
+                for(let k=0; k<1280; k+=150) {
+                    this.graphics.fillTriangle(k, branch.y - 30, k+40, branch.y - 30, k+20, branch.y - 60);
+                    this.graphics.fillTriangle(k+75, branch.y + 30, k+115, branch.y + 30, k+95, branch.y + 60);
+                }
             }
         }
     }
 
     drawDangerZones() {
         for(let zone of this.dangerZones) {
-            let intensity = zone.duration / 120;
-            this.graphics.fillStyle(0xff4444, intensity * 0.3);
-            this.graphics.fillRect(0, zone.y - 40, 1280, 80);
+            let intensity = zone.duration / 180;
+            
+            this.graphics.fillStyle(0x1a0505, 0.8);
+            this.graphics.fillRect(0, zone.y - 20, 1280, 150);
 
-            // Aviso de raízes
-            this.graphics.lineStyle(3, 0xff6655, intensity);
-            for(let i = 0; i < 20; i++) {
+            this.graphics.lineStyle(4, 0xff2222, intensity);
+            for(let i = 0; i < 40; i++) {
+                let rx = i * 32;
+                let rh = Math.random() * 60;
                 this.graphics.beginPath();
-                this.graphics.moveTo(i * 64, zone.y);
-                this.graphics.lineTo(i * 64 + 32, zone.y - 20);
+                this.graphics.moveTo(rx, zone.y + 20);
+                this.graphics.lineTo(rx + Math.random()*20 - 10, zone.y - rh);
                 this.graphics.strokePath();
             }
         }
@@ -937,531 +1150,160 @@ class ForestBossScene extends Phaser.Scene{
 
         let x = this.player.x;
         let y = this.player.y;
-        let flip = this.player.direction; // 1 = direita, -1 = esquerda
-
-        // SOMBRA
+        let flip = this.player.direction; 
+        
+        // Ângulo da mira (Sempre seguindo o Mouse)
+        let pointer = this.input.activePointer;
+        let aimAngle = Phaser.Math.Angle.Between(x, y - 20, pointer.x, pointer.y);
 
         this.graphics.fillStyle(0x000000,0.35);
+        this.graphics.fillEllipse(x, 610, 36, 8);
 
-        this.graphics.fillEllipse(
-            x,
-            610,
-            36,
-            8
-        );
+        // Animação complexa de pernas
+        let legSwing = Math.sin(this.player.animationTime) * 12;
+        let legSwingOff = Math.sin(this.player.animationTime + Math.PI) * 12;
+        let bodyTilt = Math.sin(this.player.animationTime * 0.5) * 4; 
 
-        // PERNAS (animadas ao andar) - com mais peso
-        let legSwing = Math.sin(this.player.animationTime) * 10;
-        let legSwingOff = Math.sin(this.player.animationTime + Math.PI) * 10;
-        let bodyTilt = Math.sin(this.player.animationTime * 0.5) * 2; // Inclinação corporal
+        if(!this.player.onGround) {
+            legSwing = -10; legSwingOff = 10; bodyTilt = 10; 
+        }
 
-        // Perna esquerda
+        // Pernas
         this.graphics.lineStyle(9, 0x2d2d2d);
-        this.graphics.beginPath();
-        this.graphics.moveTo(x - 6 * flip, y);
-        this.graphics.lineTo(x - 6 * flip + legSwing * flip, y + 30);
-        this.graphics.strokePath();
+        this.graphics.beginPath(); this.graphics.moveTo(x - 6 * flip, y); this.graphics.lineTo(x - 6 * flip + legSwing * flip, y + 30); this.graphics.strokePath();
+        this.graphics.beginPath(); this.graphics.moveTo(x + 6 * flip, y); this.graphics.lineTo(x + 6 * flip + legSwingOff * flip, y + 30); this.graphics.strokePath();
 
-        // Perna direita
-        this.graphics.lineStyle(9, 0x2d2d2d);
-        this.graphics.beginPath();
-        this.graphics.moveTo(x + 6 * flip, y);
-        this.graphics.lineTo(x + 6 * flip + legSwingOff * flip, y + 30);
-        this.graphics.strokePath();
-
-        // CAPA COM BALANÇO
-        let capeWave = Math.sin(this.player.animationTime * 0.8) * 2;
-
+        // Capa
+        let capeWave = Math.sin(this.player.animationTime * 0.8) * 4;
         this.graphics.fillStyle(0x111111);
-
-        this.graphics.fillTriangle(
-            x - 24 * flip,y + 20 + capeWave,
-            x + 24 * flip,y + 20 + capeWave * 0.5,
-            x + capeWave * flip,y - 8
-        );
-
-        // TECIDO INTERNO
-
+        this.graphics.fillTriangle(x - 24 * flip, y + 20 + capeWave, x + 24 * flip, y + 20 + capeWave * 0.5, x + capeWave * flip, y - 8);
         this.graphics.fillStyle(0x1f1f1f);
+        this.graphics.fillTriangle(x - 16 * flip, y + 25, x + 16 * flip, y + 25, x, y - 2);
 
-        this.graphics.fillTriangle(
-            x - 16 * flip,y + 25,
-            x + 16 * flip,y + 25,
-            x,y - 2
-        );
-
-        // CORPO COM INCLINAÇÃO
-
+        // Corpo rotacionando baseado no Movimento
         this.graphics.fillStyle(0x2d2d2d);
+        this.graphics.save();
+        this.graphics.translateCanvas(x, y - 10);
+        this.graphics.rotateCanvas((bodyTilt * flip) * Math.PI / 180);
+        this.graphics.fillRect(-10 * flip, -18, 20 * flip, 30);
+        this.graphics.restore();
 
-        this.graphics.fillRect(
-            x - 10 * flip,
-            y - 28 + bodyTilt,
-            20 * flip,
-            30
-        );
+        // --- SISTEMA DE MIRA: BRAÇO E ESPADA RASTREANDO O MOUSE ---
+        let shoulderX = x;
+        let shoulderY = y - 18;
+        let armLength = 25;
+        
+        let elbowX = shoulderX + Math.cos(aimAngle) * armLength;
+        let elbowY = shoulderY + Math.sin(aimAngle) * armLength;
 
-        // OMBRO (melhor articulação)
-        this.graphics.fillStyle(0x3a3a3a);
-        this.graphics.fillCircle(x - 12 * flip, y - 20, 6);
-
-        // BRAÇOS (animados COM PESO)
-        let armSwing = Math.sin(this.player.animationTime * 1.2) * 12;
-        let armSwingOff = Math.sin(this.player.animationTime * 1.2 + Math.PI) * 12;
-
-        // Braço esquerdo
+        // Desenha Braço
         this.graphics.lineStyle(8, 0x2d2d2d);
         this.graphics.beginPath();
-        this.graphics.moveTo(x - 12 * flip, y - 18);
-        this.graphics.lineTo(x - 32 * flip + armSwing * flip, y - 12);
+        this.graphics.moveTo(shoulderX, shoulderY);
+        this.graphics.lineTo(elbowX, elbowY);
         this.graphics.strokePath();
 
-        // Detalhe de cotovelo
         this.graphics.fillStyle(0x3a3a3a);
-        let elbowX = x - 22 * flip + armSwing * flip * 0.5;
-        this.graphics.fillCircle(elbowX, y - 15, 4);
+        this.graphics.fillCircle(elbowX, elbowY, 4); // Articulação
 
-        // Braço direito (durante ataque, segue a espada)
+        // Desenha Espada acompanhando exatamente o Braço
+        let swordLength = 40;
+        let kickback = 0;
+        
+        // Recuo ao atirar
         if(this.player.isAttacking) {
-            this.player.attackTime += 1;
-            let attackProgress = Math.min(this.player.attackTime / 8, 1);
-            let armRotation = Math.sin(attackProgress * Math.PI) * 35;
-            this.graphics.lineStyle(8, 0x2d2d2d);
-            this.graphics.beginPath();
-            this.graphics.moveTo(x + 12 * flip, y - 18);
-            this.graphics.lineTo(x + 32 * flip + armRotation * 0.8 * flip, y - 12 - armRotation);
-            this.graphics.strokePath();
-
-            // Cotovelo em ataque
-            this.graphics.fillStyle(0x3a3a3a);
-            this.graphics.fillCircle(x + 20 * flip + armRotation * 0.4 * flip, y - 15 - armRotation * 0.3, 4);
-        } else {
-            this.graphics.lineStyle(8, 0x2d2d2d);
-            this.graphics.beginPath();
-            this.graphics.moveTo(x + 12 * flip, y - 18);
-            this.graphics.lineTo(x + 32 * flip + armSwingOff * flip, y - 12);
-            this.graphics.strokePath();
-
-            // Cotovelo em repouso
-            this.graphics.fillStyle(0x3a3a3a);
-            let elbowX2 = x + 22 * flip + armSwingOff * flip * 0.5;
-            this.graphics.fillCircle(elbowX2, y - 15, 4);
+            let atkP = Math.min(this.player.attackTime / 8, 1);
+            kickback = Math.sin(atkP * Math.PI) * -8; // Puxa espada para trás
+            this.player.attackTime++;
         }
 
-        // CACHECOL
+        let swordTipX = elbowX + Math.cos(aimAngle) * (swordLength + kickback);
+        let swordTipY = elbowY + Math.sin(aimAngle) * (swordLength + kickback);
+        let handleX = elbowX + Math.cos(aimAngle) * kickback;
+        let handleY = elbowY + Math.sin(aimAngle) * kickback;
 
-        this.graphics.fillStyle(0x444444);
-
-        this.graphics.fillRect(
-            x - 12 * flip,
-            y - 30,
-            24 * flip,
-            6
-        );
-
-        // MÁSCARA KITSUNE (virada)
-
-        this.graphics.fillStyle(0xf5f5f5);
-
-        this.graphics.fillEllipse(
-            x,
-            y - 45,
-            30,
-            28
-        );
-
-        // ORELHAS (flipadas)
-
-        this.graphics.fillTriangle(
-            x - 12 * flip,y - 52,
-            x - 5 * flip - 10 * flip,y - 72,
-            x - 2 * flip,y - 50
-        );
-
-        this.graphics.fillTriangle(
-            x + 12 * flip,y - 52,
-            x + 5 * flip + 10 * flip,y - 72,
-            x + 2 * flip,y - 50
-        );
-
-        // OLHOS (flipados)
-
-        this.graphics.fillStyle(0x111111);
-
-        this.graphics.fillTriangle(
-            x - 10 * flip,y - 45,
-            x - 3 * flip,y - 42,
-            x - 10 * flip,y - 39
-        );
-
-        this.graphics.fillTriangle(
-            x + 10 * flip,y - 45,
-            x + 3 * flip,y - 42,
-            x + 10 * flip,y - 39
-        );
-
-        // MARCAS (flipadas)
-
-        this.graphics.fillStyle(0xaa0000);
-
-        this.graphics.fillTriangle(
-            x - 13 * flip,y - 36,
-            x - 7 * flip,y - 40,
-            x - 9 * flip,y - 32
-        );
-
-        this.graphics.fillTriangle(
-            x + 13 * flip,y - 36,
-            x + 7 * flip,y - 40,
-            x + 9 * flip,y - 32
-        );
-
-        // ESPADA COM ANIMAÇÃO DE ATAQUE (flipada)
-        let swordX, swordY, swordEndX, swordEndY;
-
-        if(this.player.isAttacking) {
-            // Durante ataque, espada move em arco
-            let attackProgress = Math.min(this.player.attackTime / 8, 1);
-            let swordRotation = Math.sin(attackProgress * Math.PI) * 50;
-            let swordLift = Math.sin(attackProgress * Math.PI) * 40;
-            
-            swordX = x + 10 * flip;
-            swordY = y - 8;
-            swordEndX = x + 45 * flip + swordRotation * flip;
-            swordEndY = y - 36 - swordLift;
-        } else {
-            // Posição normal - com ligeiro balanço
-            let swordSway = Math.sin(this.player.animationTime * 0.5) * 2;
-            swordX = x + 10 * flip;
-            swordY = y - 8 + swordSway;
-            swordEndX = x + 45 * flip;
-            swordEndY = y - 36 + swordSway;
-        }
-
+        // Lâmina Branca
         this.graphics.lineStyle(5, 0xbdbdbd);
         this.graphics.beginPath();
-        this.graphics.moveTo(swordX, swordY);
-        this.graphics.lineTo(swordEndX, swordEndY);
+        this.graphics.moveTo(handleX, handleY);
+        this.graphics.lineTo(swordTipX, swordTipY);
         this.graphics.strokePath();
 
-        // LÂMINA COM BRILHO DINÂMICO
-        let bladeGlow = Math.sin(this.player.animationTime * 2) * 0.2 + 0.3;
-        this.graphics.lineStyle(2, 0xffffff, bladeGlow);
+        // Brilho da Espada
+        let bladeGlow = this.player.isAttacking ? 0.8 : Math.sin(this.player.animationTime * 2) * 0.2 + 0.3;
+        this.graphics.lineStyle(2, 0xaaddff, bladeGlow);
         this.graphics.beginPath();
-        this.graphics.moveTo(swordX, swordY);
-        this.graphics.lineTo(swordEndX, swordEndY);
+        this.graphics.moveTo(handleX, handleY);
+        this.graphics.lineTo(swordTipX, swordTipY);
         this.graphics.strokePath();
 
-        // CABO
+        // Cabeça
+        this.graphics.fillStyle(0xf5f5f5);
+        this.graphics.fillEllipse(x, y - 45, 30, 28);
 
-        this.graphics.lineStyle(3, 0x553311);
+        this.graphics.fillTriangle(x - 12 * flip,y - 52, x - 15 * flip,y - 72, x - 2 * flip,y - 50);
+        this.graphics.fillTriangle(x + 12 * flip,y - 52, x + 15 * flip,y - 72, x + 2 * flip,y - 50);
 
-        this.graphics.beginPath();
+        this.graphics.fillStyle(0x111111);
+        this.graphics.fillTriangle(x - 10 * flip,y - 45, x - 3 * flip,y - 42, x - 10 * flip,y - 39);
+        this.graphics.fillTriangle(x + 10 * flip,y - 45, x + 3 * flip,y - 42, x + 10 * flip,y - 39);
 
-        this.graphics.moveTo(
-            x + 6 * flip,
-            y - 4
-        );
-
-        this.graphics.lineTo(
-            x + 15 * flip,
-            y - 12
-        );
-
-        this.graphics.strokePath();
-
-        // IDLE BREATHING
-        let breathing = Math.sin(this.player.animationTime * 0.3) * 1;
-        if(this.player.animationTime < 0.2) {
-            this.graphics.fillStyle(0xff8888, 0.15);
-            this.graphics.fillCircle(x, y - 45, 8 + breathing);
-        }
-    }
-
-    drawBoss(){
-
-        let x = this.boss.x;
-        let y = this.boss.y;
-
-        // SOMBRA
-        this.graphics.fillStyle(0x000000,0.5);
-        this.graphics.fillEllipse(x, 620, 200, 40);
-
-        // PERNAS - TRONCOS DE ÁRVORE
-        let legSwing = Math.sin(this.boss.animationTime * 0.3) * 8;
-
-        // Perna esquerda
-        this.graphics.fillStyle(0x3a2817);
-        this.graphics.beginPath();
-        this.graphics.moveTo(x - 60, y + 110);
-        this.graphics.lineTo(x - 60 + legSwing, y + 180);
-        this.graphics.closePath();
-        this.graphics.fill();
-
-        // Textura de casca
-        this.graphics.lineStyle(2, 0x1a1a0a, 0.4);
-        this.graphics.beginPath();
-        this.graphics.moveTo(x - 58, y + 110);
-        this.graphics.lineTo(x - 58 + legSwing, y + 180);
-        this.graphics.strokePath();
-
-        // Perna direita
-        this.graphics.fillStyle(0x3a2817);
-        this.graphics.beginPath();
-        this.graphics.moveTo(x + 60, y + 110);
-        this.graphics.lineTo(x + 60 - legSwing, y + 180);
-        this.graphics.closePath();
-        this.graphics.fill();
-
-        this.graphics.lineStyle(2, 0x1a1a0a, 0.4);
-        this.graphics.beginPath();
-        this.graphics.moveTo(x + 58, y + 110);
-        this.graphics.lineTo(x + 58 - legSwing, y + 180);
-        this.graphics.strokePath();
-
-        // BRAÇOS - LONGOS E PESADOS
-        let armSwing = Math.sin(this.boss.animationTime) * 20;
-        let armLift = Math.cos(this.boss.animationTime * 0.7) * 15;
-
-        // Braço esquerdo
-        this.graphics.lineStyle(28, 0x5a4830);
-        this.graphics.beginPath();
-        this.graphics.moveTo(x - 80, y);
-        this.graphics.lineTo(x - 150 + armSwing, y + 40 - armLift);
-        this.graphics.lineTo(x - 180 + armSwing, y + 120);
-        this.graphics.strokePath();
-
-        // Raízes no braço esquerdo
-        this.graphics.lineStyle(3, 0x2d5f2d, 0.6);
-        this.graphics.beginPath();
-        this.graphics.moveTo(x - 100, y + 10);
-        this.graphics.lineTo(x - 140 + armSwing, y + 50 - armLift);
-        this.graphics.strokePath();
-
-        // Braço direito
-        this.graphics.lineStyle(28, 0x5a4830);
-        this.graphics.beginPath();
-        this.graphics.moveTo(x + 80, y);
-        this.graphics.lineTo(x + 150 - armSwing, y + 40 + armLift);
-        this.graphics.lineTo(x + 180 - armSwing, y + 120);
-        this.graphics.strokePath();
-
-        // Raízes no braço direito
-        this.graphics.lineStyle(3, 0x2d5f2d, 0.6);
-        this.graphics.beginPath();
-        this.graphics.moveTo(x + 100, y + 10);
-        this.graphics.lineTo(x + 140 - armSwing, y + 50 + armLift);
-        this.graphics.strokePath();
-
-        // CORPO PRINCIPAL - CASCA DE MADEIRA
-        this.graphics.fillStyle(0x4a3820);
-        this.graphics.fillEllipse(x, y + 20, 140, 160);
-        this.graphics.fill();
-
-        // RACHURAS NA CASCA COM BRILHO VERDE
-        this.graphics.lineStyle(4, 0x44dd44, 0.6);
-        this.graphics.beginPath();
-        this.graphics.moveTo(x - 80, y - 30);
-        this.graphics.lineTo(x - 90, y + 50);
-        this.graphics.strokePath();
-
-        this.graphics.beginPath();
-        this.graphics.moveTo(x + 80, y - 20);
-        this.graphics.lineTo(x + 100, y + 60);
-        this.graphics.strokePath();
-
-        this.graphics.beginPath();
-        this.graphics.moveTo(x - 30, y - 60);
-        this.graphics.lineTo(x - 20, y + 80);
-        this.graphics.strokePath();
-
-        // MUSGO E DETALHES
-        this.graphics.fillStyle(0x55aa55, 0.7);
-        this.graphics.fillCircle(x - 100, y - 20, 20);
-        this.graphics.fillCircle(x + 90, y + 30, 18);
-        this.graphics.fillCircle(x - 50, y + 100, 16);
-        this.graphics.fillCircle(x + 60, y - 50, 14);
-
-        // FOLHAS NA ESTRUTURA
-        this.graphics.fillStyle(0x66dd00, 0.5);
-        for(let i = 0; i < 8; i++) {
-            let lx = x + Math.cos(this.boss.animationTime + i) * 100;
-            let ly = y + Math.sin(this.boss.animationTime * 0.5 + i) * 80;
-            this.graphics.fillTriangle(lx, ly, lx + 8, ly + 4, lx + 4, ly - 6);
-        }
-
-        // CABEÇA
-        this.graphics.fillStyle(0x2a1810);
-        this.graphics.fillCircle(x, y - 110, 50);
-
-        // CHIFRES - GALHOS ANTIGOS
-        this.graphics.lineStyle(16, 0x8b7355);
-        
-        // Chifre esquerdo
-        this.graphics.beginPath();
-        this.graphics.moveTo(x - 30, y - 130);
-        this.graphics.lineTo(x - 80, y - 180);
-        this.graphics.lineTo(x - 90, y - 220);
-        this.graphics.strokePath();
-
-        // Chifre direito
-        this.graphics.beginPath();
-        this.graphics.moveTo(x + 30, y - 130);
-        this.graphics.lineTo(x + 80, y - 180);
-        this.graphics.lineTo(x + 90, y - 220);
-        this.graphics.strokePath();
-
-        // OLHOS VERDES BRILHANTES
-        let eyeGlow = Math.sin(this.boss.animationTime * 2) * 0.3 + 0.6;
-        this.graphics.fillStyle(0x00ff00, eyeGlow);
-        this.graphics.fillCircle(x - 18, y - 115, 10);
-        this.graphics.fillCircle(x + 18, y - 115, 10);
-
-        // PUPILAS
-        this.graphics.fillStyle(0x000000);
-        this.graphics.fillCircle(x - 18 + Math.sin(this.boss.animationTime * 3) * 3, y - 115, 5);
-        this.graphics.fillCircle(x + 18 + Math.sin(this.boss.animationTime * 3) * 3, y - 115, 5);
-
-        // NÚCLEO ESPIRITUAL (quando exposto)
-        if(this.boss.coreExposed) {
-            let corePulse = Math.sin(this.boss.animationTime * 4) * 0.3 + 0.7;
-            
-            // Fenda no peito
-            this.graphics.fillStyle(0x000000, 0.8);
-            this.graphics.fillEllipse(x, y + 30, 60, 80);
-
-            // Núcleo brilhante
-            this.graphics.fillStyle(0x00ff66, corePulse);
-            this.graphics.fillCircle(x, y + 30, 30);
-
-            // Raízes luminosas ao redor do núcleo
-            this.graphics.lineStyle(3, 0x44ff44, corePulse);
-            for(let i = 0; i < 6; i++) {
-                let angle = (i / 6) * Math.PI * 2;
-                let startX = x + Math.cos(angle) * 25;
-                let startY = y + 30 + Math.sin(angle) * 25;
-                let endX = x + Math.cos(angle) * 50;
-                let endY = y + 30 + Math.sin(angle) * 50;
-
-                this.graphics.beginPath();
-                this.graphics.moveTo(startX, startY);
-                this.graphics.lineTo(endX, endY);
-                this.graphics.strokePath();
-            }
-
-            // Aviso visual
-            this.graphics.lineStyle(2, 0xff6600, 0.8);
-            this.graphics.strokeCircle(x, y + 30, 70);
-        }
-
-        // AURA NORMAL
-        if(!this.boss.coreExposed) {
-            this.graphics.fillStyle(0x44dd44, 0.08);
-            this.graphics.fillCircle(x, y, 220);
-        }
+        this.graphics.fillStyle(0xaa0000);
+        this.graphics.fillTriangle(x - 13 * flip,y - 36, x - 7 * flip,y - 40, x - 9 * flip,y - 32);
+        this.graphics.fillTriangle(x + 13 * flip,y - 36, x + 7 * flip,y - 40, x + 9 * flip,y - 32);
     }
 
     drawSlashes(){
-
         for(let slash of this.slashes){
+            
+            // O slash gira fisicamente pro lado que foi atirado
+            this.graphics.save();
+            this.graphics.translateCanvas(slash.x, slash.y);
+            this.graphics.rotateCanvas(slash.angle);
 
-            // AURA
-
-            this.graphics.fillStyle(0x66ccff,0.2);
-
-            this.graphics.fillEllipse(
-                slash.x,
-                slash.y,
-                60,
-                24
-            );
-
-            // CORTE
-
-            this.graphics.lineStyle(6,0xaaddff);
-
+            // Meia-Lua Mágica
+            this.graphics.fillStyle(0xaaddff, 0.9);
             this.graphics.beginPath();
+            this.graphics.arc(0, 0, 25, -Math.PI/2, Math.PI/2, false);
+            this.graphics.arc(-12, 0, 20, Math.PI/2, -Math.PI/2, true);
+            this.graphics.fill();
 
-            this.graphics.moveTo(
-                slash.x - 20,
-                slash.y
-            );
+            // Aura do Corte
+            this.graphics.fillStyle(0x66ccff, 0.3);
+            this.graphics.fillEllipse(0, 0, 45, 20);
 
-            this.graphics.lineTo(
-                slash.x + 20,
-                slash.y
-            );
-
+            // Fumaça Espiritual deixando Rastro
+            this.graphics.lineStyle(4, 0xffffff, slash.life / 60);
+            this.graphics.beginPath();
+            this.graphics.moveTo(-25, 0);
+            this.graphics.lineTo(-45, 0);
             this.graphics.strokePath();
+
+            this.graphics.restore();
         }
     }
 
     drawHealthBars(){
+        this.graphics.fillStyle(0x222222); this.graphics.fillRect(20, 20, 220, 24);
+        this.graphics.fillStyle(0xff4444); this.graphics.fillRect(20, 20, 220 * Math.max(0, this.player.hp / this.player.maxHp), 24);
+        this.graphics.lineStyle(2, 0xffffff); this.graphics.strokeRect(20, 20, 220, 24);
 
-        // PLAYER
-        this.graphics.fillStyle(0x222222);
-        this.graphics.fillRect(20, 20, 220, 24);
-
-        let playerHealthPercent = Math.max(0, this.player.hp / this.player.maxHp);
-        this.graphics.fillStyle(0xff4444);
-        this.graphics.fillRect(20, 20, 220 * playerHealthPercent, 24);
-
-        // Borda
-        this.graphics.lineStyle(2, 0xffffff);
-        this.graphics.strokeRect(20, 20, 220, 24);
-
-        // Texto HP do player
-        this.graphics.fillStyle(0xffffff);
-        this.graphics.font = "16px monospace";
-
-        // BOSS
-        this.graphics.fillStyle(0x222222);
-        this.graphics.fillRect(1040, 20, 240, 24);
-
-        let bossHealthPercent = Math.max(0, this.boss.hp / this.boss.maxHp);
-        this.graphics.fillStyle(0x55dd55);
-        this.graphics.fillRect(1040, 20, 240 * bossHealthPercent, 24);
-
-        // Borda
-        this.graphics.lineStyle(2, 0x55dd55);
-        this.graphics.strokeRect(1040, 20, 240, 24);
-
-        // Indicador de fase no boss
-        if(this.boss.phase === 2) {
-            this.graphics.lineStyle(3, 0xff6655);
-            this.graphics.strokeRect(1035, 15, 250, 34);
-        }
+        this.graphics.fillStyle(0x222222); this.graphics.fillRect(1040, 20, 240, 24);
+        this.graphics.fillStyle(0x55dd55); this.graphics.fillRect(1040, 20, 240 * Math.max(0, this.boss.hp / this.boss.maxHp), 24);
+        this.graphics.lineStyle(2, 0x55dd55); this.graphics.strokeRect(1040, 20, 240, 24);
+        
+        if(this.boss.phase === 2) { this.graphics.lineStyle(3, 0xff6655); this.graphics.strokeRect(1035, 15, 250, 34); }
     }
 }
 
 const config = {
-
     type: Phaser.AUTO,
-
-    width:1280,
-    height:720,
-
+    width:1280, height:720,
     backgroundColor:"#000000",
-
     pixelArt:false,
-
-    render: {
-        pixelPerfect: false,
-        antialias: true,
-        antialiasGL: true
-    },
-
-    scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
-        fullscreenTarget: 'parent',
-        expandParent: true
-    },
-
-    scene:[
-        MapScene,
-        ForestBossScene
-    ]
+    render: { antialias: true, antialiasGL: true },
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    scene:[MapScene, ForestBossScene]
 };
 
 new Phaser.Game(config);
